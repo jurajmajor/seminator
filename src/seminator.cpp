@@ -160,10 +160,62 @@ private:
     else
       {
         // Run the breakpoint algorithm
-        bp_twa resbp(input, cut_det_, opt_);
+        may_edges_.clear();
+        bp_twa resbp(input, cut_det_, opt_, may_edges_);
         result = resbp.res_aut();
         result->purge_dead_states();
       }
+
+    if (opt_->get("may")) {
+      // Remove all states reachable only by may-edges.
+      auto num_states = result->num_states();
+      std::queue<unsigned> bfsq;
+      std::vector<unsigned> useful(num_states, 0);
+      auto init = result->get_init_state_number();
+      useful[init] = 1;
+      bfsq.push(init);
+      while (!bfsq.empty()) {
+        auto s = bfsq.front();
+        bfsq.pop();
+        for (auto& e : result->out(s)) {
+          auto edge_num = result->edge_number(e);
+          if (may_edges_.find(edge_num) == std::end(may_edges_) && !useful[e.dst]) {
+            useful[e.dst] = 1;
+            bfsq.push(e.dst);
+          }
+        }
+      }
+
+      unsigned current = 0;
+      for (unsigned s = 0; s < num_states; ++s) {
+        if (useful[s]) {
+          useful[s] = current++;
+        } else {
+          useful[s] = -1U;
+        }
+      }
+      if (opt_->get("may-debug")) {
+        std::cout << may_edges_.size() << " " << (num_states - current) << std::endl;
+        std::exit(0);
+      }
+
+      if (current < num_states) {
+        for (unsigned s = 0; s < num_states; ++s) {
+          auto e = result->out_iteraser(s);
+          while (e) {
+            if (useful[s] == -1U || useful[e->dst] == -1U) {
+              e.erase();
+            } else {
+              ++e;
+            }
+          }
+        }
+        result->defrag_states(std::move(useful), current);
+      }
+    }
+
+    result->merge_edges();
+
 
     // Check the result
     if (!cut_det_)
@@ -210,6 +262,7 @@ private:
 
   spot::twa_graph_ptr input_;
   const spot::option_map* opt_;
+  std::set<unsigned> may_edges_;
 
   // Simplifications options
   bool postproc_;

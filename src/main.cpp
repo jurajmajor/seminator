@@ -187,6 +187,13 @@ int main(int argc, char* argv[])
             om.set("cut-always", false);
             om.set("cut-on-SCC-entry", false);
           }
+        else if (arg == "--may") {
+          om.set("may", true);
+        }
+        else if (arg == "--may-debug") {
+          om.set("may", true);
+          om.set("may-debug", true);
+        }
         // Optimizations
         else if (match_opt(arg, "--powerset-for-weak")
                  || match_opt(arg, "--jump-to-bottommost")

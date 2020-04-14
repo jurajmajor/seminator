@@ -30,11 +30,12 @@ std::string bp_name(breakpoint_state);
 
 class bp_twa {
   public:
-    bp_twa(const_aut_ptr src_aut, bool cut_det, const_om_ptr om)
+    bp_twa(const_aut_ptr src_aut, bool cut_det, const_om_ptr om, std::set<unsigned>& may_edges)
       : cut_det_(cut_det),
         src_(src_aut),
         src_si_(spot::scc_info(src_aut)),
         om_(om),
+        may_edges_(may_edges),
         psb_(new powerset_builder(src_)) {
       if (om) {
         scc_aware_ = om->get("scc-aware",1);
@@ -80,7 +81,9 @@ class bp_twa {
 
       finish_second_component(first_comp_size);
 
-      res_->merge_edges();
+      // we'll do this after removing may-edges
+      // now we can't renumber the edges
+      // res_->merge_edges();
 
       if(jump_to_bottommost_) remove_useless_prefixes();
 
@@ -148,7 +151,7 @@ class bp_twa {
     * @param[in] from (state_t) State in 1st component
     * @param[in] edge (edge_t)  Edge of the input automaton
     */
-    void add_cut_transition(state_t, edge_t);
+    void add_cut_transition(state_t, edge_t, unsigned);
 
     /**
      * \brief Removes states that have equivalent states in other SCCs.
@@ -217,7 +220,7 @@ class bp_twa {
      * Returns whether a cut transition (jump to the deterministic component)
      * for the current edge should be created.
      */
-    bool cut_condition(const edge_t& e);
+    unsigned cut_condition(const edge_t& e);
 
     // Construction modifiers; Change the default also in constructor
     std::unique_ptr<bscc_avoid> bscc_avoid_ = nullptr;
@@ -241,6 +244,9 @@ class bp_twa {
 
     // Transformation options
     const_om_ptr om_;
+
+    // TODO description
+    std::set<unsigned>& may_edges_;
 
     // mapping between power_states and their indices
     //(1st comp. of res_ or 2nd comp. of res for weak components)

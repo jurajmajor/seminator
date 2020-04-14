@@ -118,7 +118,8 @@ void
 bp_twa::create_all_cut_transitions() {
   for (auto& edge : src_->edges())
   {
-    if (cut_condition(edge))
+    auto cc = cut_condition(edge);
+    if (cc)
     {
       if (cut_det_) {
         // in cDBA, add cut-edge from each state that contains edge.src
@@ -126,10 +127,10 @@ bp_twa::create_all_cut_transitions() {
           // Can we iterate over keys of ps2num1_?
           state_set * current_states = &(num2ps1_.at(s));
           if (current_states->count(edge.src))
-            add_cut_transition(s, edge);
+            add_cut_transition(s, edge, cc);
         }
       } else {// in sDBA add (s, cond, dest)
-        add_cut_transition(edge.src, edge);
+        add_cut_transition(edge.src, edge, cc);
       }
     }
   }
@@ -302,7 +303,7 @@ bp_twa::compute_successors<breakpoint_state>(breakpoint_state bps, state_t src,
 }
 
 void
-bp_twa::add_cut_transition(state_t from, edge_t edge) {
+bp_twa::add_cut_transition(state_t from, edge_t edge, unsigned cc) {
 
   auto scc = src_si_.scc_of(edge.dst);
   bool weak = src_si_.weak_sccs()[scc];
@@ -316,7 +317,10 @@ bp_twa::add_cut_transition(state_t from, edge_t edge) {
 
   if (reuse_SCC_ && reuse)
   {
-    res_->new_edge(from, reuse_state(edge.dst), edge.cond);
+    auto edge_id = res_->new_edge(from, reuse_state(edge.dst), edge.cond);
+    if (cc == 1) {
+      may_edges_.insert(edge_id);
+    }
     return;
   }
 
@@ -332,7 +336,10 @@ bp_twa::add_cut_transition(state_t from, edge_t edge) {
       breakpoint_state dest(0, new_set, empty_set);
       target_state = bp_state(dest);
     }
-    res_->new_edge(from, target_state, edge.cond);
+    auto edge_id = res_->new_edge(from, target_state, edge.cond);
+    if (cc == 1) {
+      may_edges_.insert(edge_id);
+    }
   } else {
     state_set start({edge.src});
     if (powerset_for_weak_ && weak && !(reuse && bscc_avoid_))
@@ -395,7 +402,7 @@ bp_twa::finish_second_component(state_t start) {
 
 // Returns whether a cut transition (jump to the deterministic component)
 // for the current edge should be created.
-bool bp_twa::cut_condition(const edge_t& e)
+unsigned bp_twa::cut_condition(const edge_t& e)
 {
     unsigned u = src_si_.scc_of(e.src);
     unsigned v = src_si_.scc_of(e.dst);
@@ -405,19 +412,30 @@ bool bp_twa::cut_condition(const edge_t& e)
     // when it is deterministic BSCC and bscc_avoid is true
     // Maybe add avoid_scc(scc)?
     if (bscc_avoid_ && bscc_avoid_->avoid_scc(u))
-      return false;
+      return 0;
     // This is basically cut_on_SCC_entry for detBSCC as u != v
     if (bscc_avoid_ && bscc_avoid_->avoid_scc(v))
-      return true;
+      return 2;
 
     // Currently, 3 conditions trigger the jump:
     //  1. If the edge has the highest mark
     //  2. If we freshly enter accepting scc (--cut-on-SCC-entry option)
     //  3. If e leads to accepting SCC (--cut-always option)
-    return (src_si_.is_accepting_scc(v) &&
-            (cut_always_ || // 3
-             e.acc.has(highest_mark) || //1
-             (cut_on_SCC_entry_ && u != v))); // 2
+    if (src_si_.is_accepting_scc(v)) {
+      if (e.acc.has(highest_mark)) { // 1
+        return 2;
+      }
+
+      if (cut_always_) { // 3
+        return 1;
+      }
+
+      if (cut_on_SCC_entry_ && u != v) { // 2
+        return 1;
+      }
+    }
+
+    return 0;
 }
 
 

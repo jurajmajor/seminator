@@ -24,6 +24,7 @@
 #include <tuple>
 #include <map>
 #include <set>
+#include <queue>
 #include <iostream>
 #include <bddx.h>
 
